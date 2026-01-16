@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "static-l10n"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -83,7 +83,7 @@ dependencies = [
 
 [[package]]
 name = "static-l10n-test"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "static-l10n",
 ]

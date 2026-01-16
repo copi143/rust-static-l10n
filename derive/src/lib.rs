@@ -904,7 +904,7 @@ fn expand_match_expr(
     translations: Vec<proc_macro2::TokenStream>,
 ) -> proc_macro2::TokenStream {
     quote_spanned! {span=>
-        match crate::__STATIC_L10N_LANG__.lock().unwrap().as_ref() {
+        match { crate::__STATIC_L10N_LANG__.lock().unwrap().clone() } {
             #(#translations,)*
             other => panic!("Unsupported language: {}", other),
         }
