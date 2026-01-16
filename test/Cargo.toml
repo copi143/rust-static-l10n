@@ -1,0 +1,13 @@
+[package]
+name = "static-l10n-test"
+version = "0.0.1"
+edition = "2024"
+publish = false
+
+[package.metadata.static-l10n]
+path = "lang"
+base = "en"
+langs = ["en", "es", { name = "fr", fallback = "en" }, "zh-cn"]
+
+[dependencies]
+static-l10n = { path = "../derive" }

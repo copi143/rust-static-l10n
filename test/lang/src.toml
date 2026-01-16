@@ -1,0 +1,14 @@
+["Hello, world!"]
+zh-cn = "你好，世界！"
+es = "¡Hola, mundo!"
+fr = "Bonjour le monde!"
+
+["Hello, {}!"]
+zh-cn = "你好，{}！"
+es = "¡Hola, {}!"
+fr = "Bonjour, {}!"
+
+["Hello, {name}!"]
+zh-cn = "你好，{name}！"
+es = "¡Hola, {name}!"
+fr = "Bonjour, {name}!"

@@ -1,0 +1,19 @@
+[package]
+name = "static-l10n"
+version = "0.0.1"
+edition = "2024"
+authors = ["copi143 <copi143@outlook.com>"]
+license = "CC0-1.0"
+description = "Static localization for Rust using procedural macros."
+homepage = "https://github.com/copi143/rust-static-l10n"
+repository = "https://github.com/copi143/rust-static-l10n"
+readme = "README.md"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0.105"
+quote = "1.0.43"
+syn = { version = "2.0.114", features = ["full"] }
+toml = "0.9.11"
