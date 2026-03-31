@@ -40,13 +40,7 @@ struct L10nAssertInput {
     key: LitStr,
 }
 
-struct L10nAssertEqInput {
-    left: Expr,
-    right: Expr,
-    key: LitStr,
-}
-
-struct L10nAssertNeInput {
+struct L10nAssertCmpInput {
     left: Expr,
     right: Expr,
     key: LitStr,
@@ -58,14 +52,7 @@ struct F16nAssertInput {
     args: Punctuated<Expr, Token![,]>,
 }
 
-struct F16nAssertEqInput {
-    left: Expr,
-    right: Expr,
-    fmt: LitStr,
-    args: Punctuated<Expr, Token![,]>,
-}
-
-struct F16nAssertNeInput {
+struct F16nAssertCmpInput {
     left: Expr,
     right: Expr,
     fmt: LitStr,
@@ -94,25 +81,14 @@ impl Parse for L10nAssertInput {
     }
 }
 
-impl Parse for L10nAssertEqInput {
+impl Parse for L10nAssertCmpInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let left: Expr = input.parse()?;
         input.parse::<Token![,]>()?;
         let right: Expr = input.parse()?;
         input.parse::<Token![,]>()?;
         let key: LitStr = input.parse()?;
-        Ok(L10nAssertEqInput { left, right, key })
-    }
-}
-
-impl Parse for L10nAssertNeInput {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let left: Expr = input.parse()?;
-        input.parse::<Token![,]>()?;
-        let right: Expr = input.parse()?;
-        input.parse::<Token![,]>()?;
-        let key: LitStr = input.parse()?;
-        Ok(L10nAssertNeInput { left, right, key })
+        Ok(L10nAssertCmpInput { left, right, key })
     }
 }
 
@@ -131,7 +107,7 @@ impl Parse for F16nAssertInput {
     }
 }
 
-impl Parse for F16nAssertEqInput {
+impl Parse for F16nAssertCmpInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let left: Expr = input.parse()?;
         input.parse::<Token![,]>()?;
@@ -144,29 +120,7 @@ impl Parse for F16nAssertEqInput {
             input.parse::<Token![,]>()?;
             Punctuated::parse_terminated(input)?
         };
-        Ok(F16nAssertEqInput {
-            left,
-            right,
-            fmt,
-            args,
-        })
-    }
-}
-
-impl Parse for F16nAssertNeInput {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let left: Expr = input.parse()?;
-        input.parse::<Token![,]>()?;
-        let right: Expr = input.parse()?;
-        input.parse::<Token![,]>()?;
-        let fmt: LitStr = input.parse()?;
-        let args = if input.is_empty() {
-            Punctuated::new()
-        } else {
-            input.parse::<Token![,]>()?;
-            Punctuated::parse_terminated(input)?
-        };
-        Ok(F16nAssertNeInput {
+        Ok(F16nAssertCmpInput {
             left,
             right,
             fmt,
@@ -442,41 +396,43 @@ pub fn f16n_args(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     expand_f16n_args_expr(input).into()
 }
 
-#[proc_macro]
-pub fn l10n_print(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as LitStr);
-    expand_l10n_print_stmt(input, quote!(::std::print!)).into()
+macro_rules! impl_print_macros {
+    ($l10n:ident, $f16n:ident, [ $($mac:tt)* ]) => {
+        #[proc_macro]
+        pub fn $l10n(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as LitStr);
+            expand_l10n_print_stmt(input, quote!( $($mac)* )).into()
+        }
+        #[proc_macro]
+        pub fn $f16n(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as F16nInput);
+            expand_f16n_print_stmt(input, quote!( $($mac)* )).into()
+        }
+    };
 }
 
-#[proc_macro]
-pub fn l10n_println(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as LitStr);
-    expand_l10n_print_stmt(input, quote!(::std::println!)).into()
+impl_print_macros!(l10n_print,    f16n_print,    [::std::print!]);
+impl_print_macros!(l10n_println,  f16n_println,  [::std::println!]);
+impl_print_macros!(l10n_eprint,   f16n_eprint,   [::std::eprint!]);
+impl_print_macros!(l10n_eprintln, f16n_eprintln, [::std::eprintln!]);
+
+macro_rules! impl_write_macros {
+    ($l10n:ident, $f16n:ident, [ $($mac:tt)* ]) => {
+        #[proc_macro]
+        pub fn $l10n(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as WriteL10nInput);
+            expand_l10n_write_stmt(input, quote!( $($mac)* )).into()
+        }
+        #[proc_macro]
+        pub fn $f16n(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as WriteF16nInput);
+            expand_f16n_write_stmt(input, quote!( $($mac)* )).into()
+        }
+    };
 }
 
-#[proc_macro]
-pub fn l10n_eprint(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as LitStr);
-    expand_l10n_print_stmt(input, quote!(::std::eprint!)).into()
-}
-
-#[proc_macro]
-pub fn l10n_eprintln(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as LitStr);
-    expand_l10n_print_stmt(input, quote!(::std::eprintln!)).into()
-}
-
-#[proc_macro]
-pub fn l10n_write(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as WriteL10nInput);
-    expand_l10n_write_stmt(input, quote!(::std::write!)).into()
-}
-
-#[proc_macro]
-pub fn l10n_writeln(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as WriteL10nInput);
-    expand_l10n_write_stmt(input, quote!(::std::writeln!)).into()
-}
+impl_write_macros!(l10n_write,   f16n_write,   [::std::write!]);
+impl_write_macros!(l10n_writeln, f16n_writeln, [::std::writeln!]);
 
 #[proc_macro]
 pub fn l10n_panic(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -485,118 +441,96 @@ pub fn l10n_panic(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 #[proc_macro]
-pub fn l10n_assert(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as L10nAssertInput);
-    expand_l10n_assert_stmt(input).into()
-}
-
-#[proc_macro]
-pub fn l10n_assert_eq(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as L10nAssertEqInput);
-    expand_l10n_assert_eq_stmt(input).into()
-}
-
-#[proc_macro]
-pub fn l10n_assert_ne(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as L10nAssertNeInput);
-    expand_l10n_assert_ne_stmt(input).into()
-}
-
-#[proc_macro]
-pub fn l10n_debug_assert(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as L10nAssertInput);
-    expand_l10n_debug_assert_stmt(input).into()
-}
-
-#[proc_macro]
-pub fn l10n_debug_assert_eq(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as L10nAssertEqInput);
-    expand_l10n_debug_assert_eq_stmt(input).into()
-}
-
-#[proc_macro]
-pub fn l10n_debug_assert_ne(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as L10nAssertNeInput);
-    expand_l10n_debug_assert_ne_stmt(input).into()
-}
-
-#[proc_macro]
-pub fn f16n_print(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as F16nInput);
-    expand_f16n_print_stmt(input, quote!(::std::print!)).into()
-}
-
-#[proc_macro]
-pub fn f16n_println(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as F16nInput);
-    expand_f16n_print_stmt(input, quote!(::std::println!)).into()
-}
-
-#[proc_macro]
-pub fn f16n_eprint(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as F16nInput);
-    expand_f16n_print_stmt(input, quote!(::std::eprint!)).into()
-}
-
-#[proc_macro]
-pub fn f16n_eprintln(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as F16nInput);
-    expand_f16n_print_stmt(input, quote!(::std::eprintln!)).into()
-}
-
-#[proc_macro]
-pub fn f16n_write(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as WriteF16nInput);
-    expand_f16n_write_stmt(input, quote!(::std::write!)).into()
-}
-
-#[proc_macro]
-pub fn f16n_writeln(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as WriteF16nInput);
-    expand_f16n_write_stmt(input, quote!(::std::writeln!)).into()
-}
-
-#[proc_macro]
 pub fn f16n_panic(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(item as F16nInput);
     expand_f16n_panic_stmt(input).into()
 }
 
-#[proc_macro]
-pub fn f16n_assert(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as F16nAssertInput);
-    expand_f16n_assert_stmt(input).into()
+macro_rules! impl_l10n_assert_macros {
+    ($name:ident / $dbg:ident, cond) => {
+        #[proc_macro]
+        pub fn $name(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as L10nAssertInput);
+            expand_l10n_assert_inner(input.cond, input.key, quote!(::std::assert!)).into()
+        }
+        #[proc_macro]
+        pub fn $dbg(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as L10nAssertInput);
+            expand_l10n_assert_inner(input.cond, input.key, quote!(::std::debug_assert!)).into()
+        }
+    };
+    ($name:ident / $dbg:ident, eq) => {
+        #[proc_macro]
+        pub fn $name(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as L10nAssertCmpInput);
+            expand_l10n_assert_cmp_inner(input.left, input.right, input.key, quote!(::std::assert_eq!)).into()
+        }
+        #[proc_macro]
+        pub fn $dbg(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as L10nAssertCmpInput);
+            expand_l10n_assert_cmp_inner(input.left, input.right, input.key, quote!(::std::debug_assert_eq!)).into()
+        }
+    };
+    ($name:ident / $dbg:ident, ne) => {
+        #[proc_macro]
+        pub fn $name(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as L10nAssertCmpInput);
+            expand_l10n_assert_cmp_inner(input.left, input.right, input.key, quote!(::std::assert_ne!)).into()
+        }
+        #[proc_macro]
+        pub fn $dbg(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as L10nAssertCmpInput);
+            expand_l10n_assert_cmp_inner(input.left, input.right, input.key, quote!(::std::debug_assert_ne!)).into()
+        }
+    };
 }
 
-#[proc_macro]
-pub fn f16n_assert_eq(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as F16nAssertEqInput);
-    expand_f16n_assert_eq_stmt(input).into()
+impl_l10n_assert_macros!(l10n_assert       / l10n_debug_assert,       cond);
+impl_l10n_assert_macros!(l10n_assert_eq    / l10n_debug_assert_eq,    eq);
+impl_l10n_assert_macros!(l10n_assert_ne    / l10n_debug_assert_ne,    ne);
+
+macro_rules! impl_f16n_assert_macros {
+    ($name:ident / $dbg:ident, cond) => {
+        #[proc_macro]
+        pub fn $name(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as F16nAssertInput);
+            expand_f16n_assert_inner(input.cond, input.fmt, input.args, quote!(::std::assert!)).into()
+        }
+        #[proc_macro]
+        pub fn $dbg(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as F16nAssertInput);
+            expand_f16n_assert_inner(input.cond, input.fmt, input.args, quote!(::std::debug_assert!)).into()
+        }
+    };
+    ($name:ident / $dbg:ident, eq) => {
+        #[proc_macro]
+        pub fn $name(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as F16nAssertCmpInput);
+            expand_f16n_assert_cmp_inner(input.left, input.right, input.fmt, input.args, quote!(::std::assert_eq!)).into()
+        }
+        #[proc_macro]
+        pub fn $dbg(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as F16nAssertCmpInput);
+            expand_f16n_assert_cmp_inner(input.left, input.right, input.fmt, input.args, quote!(::std::debug_assert_eq!)).into()
+        }
+    };
+    ($name:ident / $dbg:ident, ne) => {
+        #[proc_macro]
+        pub fn $name(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as F16nAssertCmpInput);
+            expand_f16n_assert_cmp_inner(input.left, input.right, input.fmt, input.args, quote!(::std::assert_ne!)).into()
+        }
+        #[proc_macro]
+        pub fn $dbg(item: ::proc_macro::TokenStream) -> ::proc_macro::TokenStream {
+            let input = parse_macro_input!(item as F16nAssertCmpInput);
+            expand_f16n_assert_cmp_inner(input.left, input.right, input.fmt, input.args, quote!(::std::debug_assert_ne!)).into()
+        }
+    };
 }
 
-#[proc_macro]
-pub fn f16n_assert_ne(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as F16nAssertNeInput);
-    expand_f16n_assert_ne_stmt(input).into()
-}
-
-#[proc_macro]
-pub fn f16n_debug_assert(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as F16nAssertInput);
-    expand_f16n_debug_assert_stmt(input).into()
-}
-
-#[proc_macro]
-pub fn f16n_debug_assert_eq(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as F16nAssertEqInput);
-    expand_f16n_debug_assert_eq_stmt(input).into()
-}
-
-#[proc_macro]
-pub fn f16n_debug_assert_ne(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(item as F16nAssertNeInput);
-    expand_f16n_debug_assert_ne_stmt(input).into()
-}
+impl_f16n_assert_macros!(f16n_assert       / f16n_debug_assert,       cond);
+impl_f16n_assert_macros!(f16n_assert_eq    / f16n_debug_assert_eq,    eq);
+impl_f16n_assert_macros!(f16n_assert_ne    / f16n_debug_assert_ne,    ne);
 
 fn expand_l10n_expr(input: LitStr) -> proc_macro2::TokenStream {
     let key = input.value();
@@ -661,67 +595,55 @@ fn expand_l10n_panic_stmt(input: LitStr) -> proc_macro2::TokenStream {
     expand_match_expr(span, translations)
 }
 
-fn expand_l10n_assert_stmt(input: L10nAssertInput) -> proc_macro2::TokenStream {
-    let cond = input.cond;
-    let key = input.key;
+fn expand_l10n_assert_inner(
+    cond: Expr,
+    key: LitStr,
+    assert_mac: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
     let span = key.span();
     let message = expand_l10n_expr(key);
     quote_spanned! {span=>
-        ::std::assert!(#cond, "{}", #message);
+        #assert_mac(#cond, "{}", #message);
     }
 }
 
-fn expand_l10n_assert_eq_stmt(input: L10nAssertEqInput) -> proc_macro2::TokenStream {
-    let left = input.left;
-    let right = input.right;
-    let key = input.key;
+fn expand_l10n_assert_cmp_inner(
+    left: Expr,
+    right: Expr,
+    key: LitStr,
+    assert_mac: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
     let span = key.span();
     let message = expand_l10n_expr(key);
     quote_spanned! {span=>
-        ::std::assert_eq!(#left, #right, "{}", #message);
+        #assert_mac(#left, #right, "{}", #message);
     }
 }
 
-fn expand_l10n_assert_ne_stmt(input: L10nAssertNeInput) -> proc_macro2::TokenStream {
-    let left = input.left;
-    let right = input.right;
-    let key = input.key;
-    let span = key.span();
-    let message = expand_l10n_expr(key);
+fn expand_f16n_assert_inner(
+    cond: Expr,
+    fmt: LitStr,
+    args: Punctuated<Expr, Token![,]>,
+    assert_mac: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    let span = fmt.span();
+    let message = expand_f16n_args_expr(F16nInput { fmt, args });
     quote_spanned! {span=>
-        ::std::assert_ne!(#left, #right, "{}", #message);
+        #assert_mac(#cond, "{}", #message);
     }
 }
 
-fn expand_l10n_debug_assert_stmt(input: L10nAssertInput) -> proc_macro2::TokenStream {
-    let cond = input.cond;
-    let key = input.key;
-    let span = key.span();
-    let message = expand_l10n_expr(key);
+fn expand_f16n_assert_cmp_inner(
+    left: Expr,
+    right: Expr,
+    fmt: LitStr,
+    args: Punctuated<Expr, Token![,]>,
+    assert_mac: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    let span = fmt.span();
+    let message = expand_f16n_args_expr(F16nInput { fmt, args });
     quote_spanned! {span=>
-        ::std::debug_assert!(#cond, "{}", #message);
-    }
-}
-
-fn expand_l10n_debug_assert_eq_stmt(input: L10nAssertEqInput) -> proc_macro2::TokenStream {
-    let left = input.left;
-    let right = input.right;
-    let key = input.key;
-    let span = key.span();
-    let message = expand_l10n_expr(key);
-    quote_spanned! {span=>
-        ::std::debug_assert_eq!(#left, #right, "{}", #message);
-    }
-}
-
-fn expand_l10n_debug_assert_ne_stmt(input: L10nAssertNeInput) -> proc_macro2::TokenStream {
-    let left = input.left;
-    let right = input.right;
-    let key = input.key;
-    let span = key.span();
-    let message = expand_l10n_expr(key);
-    quote_spanned! {span=>
-        ::std::debug_assert_ne!(#left, #right, "{}", #message);
+        #assert_mac(#left, #right, "{}", #message);
     }
 }
 
@@ -815,88 +737,6 @@ fn expand_f16n_panic_stmt(input: F16nInput) -> proc_macro2::TokenStream {
         },
     );
     expand_match_expr(span, translations)
-}
-
-fn expand_f16n_assert_stmt(input: F16nAssertInput) -> proc_macro2::TokenStream {
-    let cond = input.cond;
-    let fmt = input.fmt;
-    let span = fmt.span();
-    let message = expand_f16n_args_expr(F16nInput {
-        fmt,
-        args: input.args,
-    });
-    quote_spanned! {span=>
-        ::std::assert!(#cond, "{}", #message);
-    }
-}
-
-fn expand_f16n_assert_eq_stmt(input: F16nAssertEqInput) -> proc_macro2::TokenStream {
-    let left = input.left;
-    let right = input.right;
-    let fmt = input.fmt;
-    let span = fmt.span();
-    let message = expand_f16n_args_expr(F16nInput {
-        fmt,
-        args: input.args,
-    });
-    quote_spanned! {span=>
-        ::std::assert_eq!(#left, #right, "{}", #message);
-    }
-}
-
-fn expand_f16n_assert_ne_stmt(input: F16nAssertNeInput) -> proc_macro2::TokenStream {
-    let left = input.left;
-    let right = input.right;
-    let fmt = input.fmt;
-    let span = fmt.span();
-    let message = expand_f16n_args_expr(F16nInput {
-        fmt,
-        args: input.args,
-    });
-    quote_spanned! {span=>
-        ::std::assert_ne!(#left, #right, "{}", #message);
-    }
-}
-
-fn expand_f16n_debug_assert_stmt(input: F16nAssertInput) -> proc_macro2::TokenStream {
-    let cond = input.cond;
-    let fmt = input.fmt;
-    let span = fmt.span();
-    let message = expand_f16n_args_expr(F16nInput {
-        fmt,
-        args: input.args,
-    });
-    quote_spanned! {span=>
-        ::std::debug_assert!(#cond, "{}", #message);
-    }
-}
-
-fn expand_f16n_debug_assert_eq_stmt(input: F16nAssertEqInput) -> proc_macro2::TokenStream {
-    let left = input.left;
-    let right = input.right;
-    let fmt = input.fmt;
-    let span = fmt.span();
-    let message = expand_f16n_args_expr(F16nInput {
-        fmt,
-        args: input.args,
-    });
-    quote_spanned! {span=>
-        ::std::debug_assert_eq!(#left, #right, "{}", #message);
-    }
-}
-
-fn expand_f16n_debug_assert_ne_stmt(input: F16nAssertNeInput) -> proc_macro2::TokenStream {
-    let left = input.left;
-    let right = input.right;
-    let fmt = input.fmt;
-    let span = fmt.span();
-    let message = expand_f16n_args_expr(F16nInput {
-        fmt,
-        args: input.args,
-    });
-    quote_spanned! {span=>
-        ::std::debug_assert_ne!(#left, #right, "{}", #message);
-    }
 }
 
 fn expand_match_expr(
