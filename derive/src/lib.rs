@@ -398,12 +398,68 @@ pub fn main(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
             }
         });
     let default_lang = &CONFIG.base;
+    let default_variant =
+        syn::Ident::new(&lang_ident(default_lang), proc_macro2::Span::call_site());
+
+    let lang_enum = generate_lang_enum();
+    let try_from_impl = generate_try_from_impl();
+
     quote! {
         #(#include_files)*
-        static __STATIC_L10N_LANG__: ::std::sync::Mutex<&'static str> =
-            ::std::sync::Mutex::new(#default_lang);
+
+        #lang_enum
+
+        #try_from_impl
+
+        static __STATIC_L10N_LANG__: ::std::sync::Mutex<__StaticL10nLang> =
+            ::std::sync::Mutex::new(__StaticL10nLang::#default_variant);
     }
     .into()
+}
+
+fn generate_lang_enum() -> proc_macro2::TokenStream {
+    let enum_variants = generate_enum_variants();
+    quote! {
+        #[repr(u8)]
+        #[allow(non_camel_case_types)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        enum __StaticL10nLang {
+            #(#enum_variants,)*
+        }
+    }
+}
+
+fn generate_try_from_impl() -> proc_macro2::TokenStream {
+    let try_from_arms: Vec<_> = CONFIG
+        .langs
+        .iter()
+        .map(|lc| {
+            let name = &lc.name;
+            let ident = syn::Ident::new(&lang_ident(&lc.name), proc_macro2::Span::call_site());
+            quote! { #name => ::std::result::Result::Ok(__StaticL10nLang::#ident) }
+        })
+        .collect();
+
+    quote! {
+        impl ::std::convert::TryFrom<&str> for __StaticL10nLang {
+            type Error = &'static str;
+
+            fn try_from(value: &str) -> ::std::result::Result<Self, Self::Error> {
+                match value {
+                    #(#try_from_arms,)*
+                    _ => ::std::result::Result::Err("unsupported language"),
+                }
+            }
+        }
+    }
+}
+
+fn generate_enum_variants() -> Vec<syn::Ident> {
+    CONFIG
+        .langs
+        .iter()
+        .map(|lc| syn::Ident::new(&lang_ident(&lc.name), proc_macro2::Span::call_site()))
+        .collect()
 }
 
 #[proc_macro]
@@ -411,7 +467,8 @@ pub fn lang(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let lang = syn::parse_macro_input!(item as syn::LitStr).value();
     quote! {
         {
-            *crate::__STATIC_L10N_LANG__.lock().unwrap() = #lang;
+            let lang: crate::__StaticL10nLang = #lang.try_into().unwrap();
+            *crate::__STATIC_L10N_LANG__.lock().unwrap() = lang
         }
     }
     .into()
@@ -602,8 +659,9 @@ fn expand_l10n_expr(input: LitStr) -> proc_macro2::TokenStream {
     let key = input.value();
     let span = input.span();
     let translations = build_l10n_arms(&key, span, |lang, translation, span| {
+        let lang_ident = syn::Ident::new(&lang_ident(lang), span);
         quote_spanned! {span=>
-            #lang => #translation
+            crate::__StaticL10nLang::#lang_ident => #translation
         }
     });
     expand_match_expr(span, translations)
@@ -613,8 +671,9 @@ fn expand_l10n_args_expr(input: LitStr) -> proc_macro2::TokenStream {
     let key = input.value();
     let span = input.span();
     let translations = build_l10n_arms(&key, span, |lang, translation, span| {
+        let lang_ident = syn::Ident::new(&lang_ident(lang), span);
         quote_spanned! {span=>
-            #lang => ::std::format_args!(#translation)
+            crate::__StaticL10nLang::#lang_ident => ::std::format_args!(#translation)
         }
     });
     expand_match_expr(span, translations)
@@ -627,8 +686,9 @@ fn expand_l10n_print_stmt(
     let key = input.value();
     let span = input.span();
     let translations = build_l10n_arms(&key, span, |lang, translation, span| {
+        let lang_ident = syn::Ident::new(&lang_ident(lang), span);
         quote_spanned! {span=>
-            #lang => { #printer(#translation); }
+            crate::__StaticL10nLang::#lang_ident => { #printer(#translation); }
         }
     });
     expand_match_expr(span, translations)
@@ -643,8 +703,9 @@ fn expand_l10n_write_stmt(
     let key_value = key.value();
     let span = key.span();
     let translations = build_l10n_arms(&key_value, span, |lang, translation, span| {
+        let lang_ident = syn::Ident::new(&lang_ident(lang), span);
         quote_spanned! {span=>
-            #lang => { let _ = #writer(#target, #translation); }
+            crate::__StaticL10nLang::#lang_ident => { let _ = #writer(#target, #translation); }
         }
     });
     expand_match_expr(span, translations)
@@ -654,8 +715,9 @@ fn expand_l10n_panic_stmt(input: LitStr) -> proc_macro2::TokenStream {
     let key = input.value();
     let span = input.span();
     let translations = build_l10n_arms(&key, span, |lang, translation, span| {
+        let lang = syn::Ident::new(&lang_ident(lang), span);
         quote_spanned! {span=>
-            #lang => ::std::panic!(#translation)
+            crate::__StaticL10nLang::#lang => ::std::panic!(#translation)
         }
     });
     expand_match_expr(span, translations)
@@ -734,8 +796,9 @@ fn expand_f16n_expr(input: F16nInput) -> proc_macro2::TokenStream {
         span,
         &input.args,
         |lang, translation, span, args| {
+            let lang = syn::Ident::new(&lang_ident(lang), span);
             quote_spanned! {span=>
-                #lang => format!(#translation, #(#args),*)
+                crate::__StaticL10nLang::#lang => format!(#translation, #(#args),*)
             }
         },
     );
@@ -751,8 +814,9 @@ fn expand_f16n_args_expr(input: F16nInput) -> proc_macro2::TokenStream {
         span,
         &input.args,
         |lang, translation, span, args| {
+            let lang = syn::Ident::new(&lang_ident(lang), span);
             quote_spanned! {span=>
-                #lang => ::std::format_args!(#translation, #(#args),*)
+                crate::__StaticL10nLang::#lang => ::std::format_args!(#translation, #(#args),*)
             }
         },
     );
@@ -771,8 +835,9 @@ fn expand_f16n_print_stmt(
         span,
         &input.args,
         |lang, translation, span, args| {
+            let lang = syn::Ident::new(&lang_ident(lang), span);
             quote_spanned! {span=>
-                #lang => { #printer(#translation, #(#args),*); }
+                crate::__StaticL10nLang::#lang => { #printer(#translation, #(#args),*); }
             }
         },
     );
@@ -792,8 +857,9 @@ fn expand_f16n_write_stmt(
         span,
         &input.args,
         |lang, translation, span, args| {
+            let lang = syn::Ident::new(&lang_ident(lang), span);
             quote_spanned! {span=>
-                #lang => { let _ = #writer(#target, #translation, #(#args),*); }
+                crate::__StaticL10nLang::#lang => { let _ = #writer(#target, #translation, #(#args),*); }
             }
         },
     );
@@ -809,8 +875,9 @@ fn expand_f16n_panic_stmt(input: F16nInput) -> proc_macro2::TokenStream {
         span,
         &input.args,
         |lang, translation, span, args| {
+            let lang = syn::Ident::new(&lang_ident(lang), span);
             quote_spanned! {span=>
-                #lang => ::std::panic!(#translation, #(#args),*)
+                crate::__StaticL10nLang::#lang => ::std::panic!(#translation, #(#args),*)
             }
         },
     );
@@ -906,7 +973,6 @@ fn expand_match_expr(
     quote_spanned! {span=>
         match { crate::__STATIC_L10N_LANG__.lock().unwrap().clone() } {
             #(#translations,)*
-            other => panic!("Unsupported language: {}", other),
         }
     }
 }
@@ -923,8 +989,10 @@ fn build_l10n_arms(
             arms.push(make_arm(&lang, &translation, span));
         } else {
             let error_msg = format!("Missing translation for key '{}' in lang '{}'", key, lang);
+            let lang_ident_str = lang_ident(&lang);
+            let lang_ident = syn::Ident::new(&lang_ident_str, span);
             arms.push(quote_spanned! {span=>
-                #lang => compile_error!(#error_msg)
+                crate::__StaticL10nLang::#lang_ident => compile_error!(#error_msg)
             });
         }
     }
@@ -954,4 +1022,8 @@ fn build_f16n_arms(
         }
     }
     arms
+}
+
+fn lang_ident(name: &str) -> String {
+    name.replace('-', "_")
 }
